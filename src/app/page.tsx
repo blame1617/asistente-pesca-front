@@ -8,14 +8,34 @@ export default function Home() {
   ]);
   const [inputText, setInputText] = useState("");
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!inputText.trim()) return;
 
-    // Agregamos el mensaje del usuario a la UI temporalmente
-    setMessages(prev => [...prev, { role: "user", content: inputText }]);
+    const userMessage = inputText;
+
+    // 1. Agregamos el mensaje del usuario a la UI temporalmente
+    setMessages(prev => [...prev, { role: "user", content: userMessage }]);
     setInputText("");
 
-    // Aquí luego conectaremos con nuestro backend de FastAPI
+    try {
+      // 2. Conectamos con el backend de FastAPI
+      const response = await fetch("http://localhost:8000/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ message: userMessage }),
+      });
+
+      const data = await response.json();
+
+      // 3. Agregamos la respuesta del backend a la UI
+      setMessages(prev => [...prev, data]);
+
+    } catch (error) {
+      console.error("Error conectando con el backend:", error);
+      setMessages(prev => [...prev, { role: "assistant", content: "Error de conexión. ¿Está FastAPI encendido en el puerto 8000?" }]);
+    }
   };
 
   return (
@@ -31,9 +51,9 @@ export default function Home() {
         {messages.map((msg, index) => (
           <div
             key={index}
-            className={`p-3 rounded-lg max-w-[80%] ${msg.role === "assistant"
-                ? "bg-gray-100 text-gray-800 self-start rounded-tl-none"
-                : "bg-blue-600 text-white self-end rounded-tr-none"
+            className={`p-3 rounded-lg max-w-[80%] whitespace-pre-wrap ${msg.role === "assistant"
+              ? "bg-gray-100 text-gray-800 self-start rounded-tl-none"
+              : "bg-blue-600 text-white self-end rounded-tr-none"
               }`}
           >
             {msg.content}
@@ -48,7 +68,6 @@ export default function Home() {
           className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors"
           title="Escanear Señuelo"
         >
-          {/* Ícono de cámara simple usando SVG */}
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
             <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
             <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" />
