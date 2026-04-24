@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Webcam from 'react-webcam';
+import ReactMarkdown from "react-markdown"
 
 // Definimos la estructura de un mensaje para TypeScript
 interface Mensaje {
@@ -178,7 +179,9 @@ export default function AsistentePesca() {
                 ? 'bg-blue-600 text-white rounded-br-none shadow-md'
                 : 'bg-white border border-gray-200 text-gray-800 rounded-bl-none shadow-sm'
                 }`}>
-                {msg.content}
+                <div className="prose prose-sm max-w-none text-current">
+                <ReactMarkdown>{msg.content}</ReactMarkdown>
+                </div>
               </div>
             </div>
           ))}
