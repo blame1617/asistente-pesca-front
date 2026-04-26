@@ -2,9 +2,18 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Webcam from 'react-webcam';
-import ReactMarkdown from "react-markdown"
+import ReactMarkdown from "react-markdown";
+import { useTheme } from "next-themes";
 
-// Definimos la estructura de un mensaje para TypeScript
+// Componentes de shadcn/ui
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+
+// Íconos de Lucide
+import { Camera, Paperclip, Send, Fish, User, Bot, X, Moon, Sun } from "lucide-react";
+
 interface Mensaje {
   role: string;
   content: string;
@@ -17,15 +26,15 @@ export default function AsistentePesca() {
   const [inputUsuario, setInputUsuario] = useState("");
   const [senueloActual, setSenueloActual] = useState("Ninguno");
   const [cargando, setCargando] = useState(false);
-
-  // Estado para controlar si mostramos la cámara en vivo
   const [mostrarCamara, setMostrarCamara] = useState(false);
+
+  // Hook para controlar el modo oscuro
+  const { setTheme, theme } = useTheme();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const webcamRef = useRef<Webcam>(null);
 
-  // --- AUTO-SCROLL ---
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -34,7 +43,6 @@ export default function AsistentePesca() {
     scrollToBottom();
   }, [mensajes, cargando]);
 
-  // --- FUNCIÓN DE SUBIDA COMÚN ---
   const procesarImagen = async (file: File) => {
     const formData = new FormData();
     formData.append("file", file);
@@ -53,7 +61,7 @@ export default function AsistentePesca() {
         setSenueloActual(data.detected);
         setMensajes((prev) => [
           ...prev,
-          { role: "assistant", content: `📸 ¡Listo! He detectado un ${data.detected}. ¿En qué te puedo ayudar con él?` }
+          { role: "assistant", content: `📸 ¡Listo! He detectado un **${data.detected}**. ¿En qué te puedo ayudar con él?` }
         ]);
       } else {
         setSenueloActual("No detectado");
@@ -61,18 +69,16 @@ export default function AsistentePesca() {
       }
     } catch (error) {
       console.error("Error de conexión:", error);
-      setSenueloActual("Error de conexión");
+      setSenueloActual("Error");
     }
   };
 
-  // --- CAPTURA DESDE WEBCAM EN VIVO ---
   const capturarFoto = async () => {
     const imageSrc = webcamRef.current?.getScreenshot();
     if (!imageSrc) return;
 
-    setMostrarCamara(false); // Ocultamos la cámara inmediatamente
+    setMostrarCamara(false);
 
-    // Convertimos la imagen de Base64 a un objeto File (para que FastAPI la acepte)
     const res = await fetch(imageSrc);
     const blob = await res.blob();
     const file = new File([blob], "captura-webcam.jpg", { type: "image/jpeg" });
@@ -80,7 +86,6 @@ export default function AsistentePesca() {
     await procesarImagen(file);
   };
 
-  // --- CAPTURA DESDE ARCHIVO (Fallback) ---
   const escanearArchivo = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -92,7 +97,6 @@ export default function AsistentePesca() {
     }
   };
 
-  // --- ENVÍO DE CHAT AL LLM ---
   const enviarMensaje = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!inputUsuario.trim()) return;
@@ -122,90 +126,133 @@ export default function AsistentePesca() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4 md:p-8 font-sans relative">
-      <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden flex flex-col h-[85vh]">
+    // Aquí agregamos el gradiente "Oceánico" para el fondo general
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-cyan-50 dark:from-slate-950 dark:via-background dark:to-slate-900 p-4 md:p-8 font-sans relative flex items-center justify-center transition-colors duration-500">
 
-        {/* MODAL DE LA CÁMARA (Se superpone cuando mostrarCamara es true) */}
-        {mostrarCamara && (
-          <div className="absolute inset-0 bg-black/80 z-50 flex flex-col items-center justify-center p-4">
-            <div className="bg-white p-4 rounded-xl shadow-2xl w-full max-w-md flex flex-col items-center">
-              <h2 className="text-lg font-bold mb-4 text-gray-800">Muestra tu señuelo</h2>
-
-              <div className="rounded-lg overflow-hidden border-4 border-blue-500 w-full bg-black">
-                <Webcam
-                  audio={false}
-                  ref={webcamRef}
-                  screenshotFormat="image/jpeg"
-                  videoConstraints={{
-                    facingMode: "user",
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                  }}
-                  className="w-full object-cover"
-                />
-              </div>
-
-              <div className="flex gap-4 mt-6 w-full">
-                <button
-                  onClick={() => setMostrarCamara(false)}
-                  className="flex-1 bg-red-100 text-red-700 py-3 rounded-lg font-bold hover:bg-red-200"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={capturarFoto}
-                  className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold shadow-lg hover:bg-blue-700"
-                >
-                  📸 Tomar Foto
-                </button>
-              </div>
+      {/* MODAL DE LA CÁMARA */}
+      {mostrarCamara && (
+        <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-4">
+          <Card className="w-full max-w-md border-border shadow-2xl bg-card overflow-hidden">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 bg-muted/50">
+              <h2 className="text-lg font-semibold tracking-tight text-foreground">Escáner de Señuelo</h2>
+              <Button variant="ghost" size="icon" onClick={() => setMostrarCamara(false)}>
+                <X className="h-5 w-5 text-muted-foreground" />
+              </Button>
+            </CardHeader>
+            <div className="bg-black relative aspect-video">
+              <Webcam
+                audio={false}
+                ref={webcamRef}
+                screenshotFormat="image/jpeg"
+                videoConstraints={{ facingMode: "environment" }}
+                className="w-full h-full object-cover"
+              />
             </div>
-          </div>
-        )}
+            <div className="p-4 flex gap-3">
+              <Button variant="outline" className="w-full" onClick={() => setMostrarCamara(false)}>
+                Cancelar
+              </Button>
+              <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white" onClick={capturarFoto}>
+                <Camera className="mr-2 h-4 w-4" /> Tomar Foto
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* CONTENEDOR PRINCIPAL DEL CHAT */}
+      <Card className="w-full max-w-3xl h-[85vh] flex flex-col shadow-2xl border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
 
         {/* CABECERA */}
-        <div className="bg-blue-800 text-white p-4 flex justify-between items-center z-10">
-          <h1 className="text-xl font-bold">🎣 Asistente de Pesca AI</h1>
-          <div className="text-sm bg-blue-900 px-3 py-1 rounded-full border border-blue-700 shadow-inner">
-            Señuelo: <span className="font-bold text-green-400">{senueloActual}</span>
+        <CardHeader className="flex flex-row items-center justify-between border-b border-border bg-card/50 p-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 dark:bg-blue-500 text-white shadow-md">
+              <Fish className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold tracking-tight text-foreground">Asistente de Pesca</h1>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Atento a tus dudas</p>
+            </div>
           </div>
-        </div>
+
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-muted rounded-full border border-border shadow-inner text-xs font-medium text-foreground">
+              <span className="text-muted-foreground">Contexto:</span>
+              <span className={`font-bold ${senueloActual !== "Ninguno" && senueloActual !== "Analizando..." && senueloActual !== "No detectado" ? "text-blue-500" : ""}`}>
+                {senueloActual}
+              </span>
+            </div>
+
+            {/* BOTÓN DE MODO OSCURO */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              className="rounded-full"
+              title="Alternar tema"
+            >
+              <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0 text-amber-500" />
+              <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100 text-blue-400" />
+            </Button>
+          </div>
+        </CardHeader>
 
         {/* ÁREA DE MENSAJES */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+        <CardContent className="flex-1 overflow-y-auto p-4 space-y-6 bg-muted/20">
           {mensajes.map((msg, index) => (
-            <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[80%] rounded-2xl px-4 py-2 ${msg.role === 'user'
-                ? 'bg-blue-600 text-white rounded-br-none shadow-md'
-                : 'bg-white border border-gray-200 text-gray-800 rounded-bl-none shadow-sm'
+            <div key={index} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+
+              <Avatar className="h-8 w-8 mt-1 shadow-sm border border-border">
+                {msg.role === 'user' ? (
+                  <AvatarFallback className="bg-blue-600 text-white"><User className="h-4 w-4" /></AvatarFallback>
+                ) : (
+                  <AvatarFallback className="bg-background text-foreground"><Bot className="h-5 w-5 text-blue-500" /></AvatarFallback>
+                )}
+              </Avatar>
+
+              <div className={`max-w-[80%] rounded-2xl px-5 py-3 text-sm shadow-md ${msg.role === 'user'
+                ? 'bg-blue-600 dark:bg-blue-700 text-white rounded-tr-sm'
+                : 'bg-background border border-border text-foreground rounded-tl-sm'
                 }`}>
-                <div className="prose prose-sm max-w-none text-current">
-                <ReactMarkdown>{msg.content}</ReactMarkdown>
+                <div className={`prose prose-sm max-w-none ${msg.role === 'user' ? 'text-white prose-p:text-white prose-strong:text-white' : 'dark:prose-invert'}`}>
+                  <ReactMarkdown>{msg.content}</ReactMarkdown>
                 </div>
               </div>
             </div>
           ))}
+
           {cargando && (
-            <div className="text-gray-400 text-sm italic animate-pulse">El asistente está analizando...</div>
+            <div className="flex gap-3 flex-row">
+              <Avatar className="h-8 w-8 mt-1 shadow-sm border border-border">
+                <AvatarFallback className="bg-background text-foreground"><Bot className="h-5 w-5 text-blue-500" /></AvatarFallback>
+              </Avatar>
+              <div className="bg-background border border-border rounded-2xl rounded-tl-sm px-5 py-3 shadow-md flex items-center gap-2">
+                <span className="flex gap-1">
+                  <span className="h-2 w-2 bg-blue-400 rounded-full animate-bounce"></span>
+                  <span className="h-2 w-2 bg-blue-400 rounded-full animate-bounce delay-75"></span>
+                  <span className="h-2 w-2 bg-blue-400 rounded-full animate-bounce delay-150"></span>
+                </span>
+              </div>
+            </div>
           )}
           <div ref={messagesEndRef} />
-        </div>
+        </CardContent>
 
         {/* ZONA DE CONTROLES */}
-        <div className="p-4 bg-white border-t border-gray-200">
-          <form onSubmit={enviarMensaje} className="flex gap-2 items-center">
+        <CardFooter className="p-4 bg-card border-t border-border">
+          <form onSubmit={enviarMensaje} className="flex w-full items-center gap-2 bg-muted/50 rounded-full p-1 border border-border shadow-inner focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 focus-within:ring-offset-background transition-all">
 
-            {/* BOTÓN DE WEBCAM EN VIVO (Principal) */}
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon"
+              className="rounded-full text-muted-foreground hover:text-blue-500 hover:bg-background flex-shrink-0"
               onClick={() => setMostrarCamara(true)}
-              className="bg-green-600 hover:bg-green-700 text-white p-3 rounded-lg shadow-md transition-transform active:scale-95 flex-shrink-0"
-              title="Abrir Cámara en Vivo"
+              title="Abrir Cámara"
             >
-              📷
-            </button>
+              <Camera className="h-5 w-5" />
+            </Button>
 
-            {/* INPUT OCULTO Y BOTÓN DE SUBIR ARCHIVO (Secundario/Fallback) */}
             <input
               type="file"
               accept="image/*"
@@ -213,37 +260,38 @@ export default function AsistentePesca() {
               onChange={escanearArchivo}
               className="hidden"
             />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="bg-gray-200 hover:bg-gray-300 text-gray-700 p-3 rounded-lg transition-colors flex-shrink-0"
-              title="Subir foto desde la galería"
-            >
-              📎
-            </button>
 
-            {/* INPUT DE TEXTO */}
-            <input
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="rounded-full text-muted-foreground hover:text-blue-500 hover:bg-background flex-shrink-0"
+              onClick={() => fileInputRef.current?.click()}
+              title="Subir foto"
+            >
+              <Paperclip className="h-5 w-5" />
+            </Button>
+
+            <Input
               type="text"
               value={inputUsuario}
               onChange={(e) => setInputUsuario(e.target.value)}
-              placeholder="Pregúntame sobre el señuelo..."
-              className="flex-1 border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-black shadow-inner"
+              placeholder="Pregúntale al asistente..."
+              className="flex-1 bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 px-2 shadow-none text-foreground placeholder:text-muted-foreground"
               disabled={cargando}
             />
 
-            {/* BOTÓN DE ENVIAR */}
-            <button
+            <Button
               type="submit"
               disabled={cargando || !inputUsuario.trim()}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:text-gray-500 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-all flex-shrink-0"
+              className="rounded-full bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 text-white shadow-md flex-shrink-0"
+              size="icon"
             >
-              Enviar
-            </button>
+              <Send className="h-4 w-4 ml-0.5" />
+            </Button>
           </form>
-        </div>
-
-      </div>
+        </CardFooter>
+      </Card>
     </div>
   );
 }
