@@ -95,6 +95,8 @@ export default function AsistentePesca() {
 
       const data = await response.json();
 
+      console.log("Respuesta del servidor", data);
+
       if (data.status === "success") {
         setSenueloActual(data.detected);
         setMensajes((prev) => [
