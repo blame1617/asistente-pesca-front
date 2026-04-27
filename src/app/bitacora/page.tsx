@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogTrigger, DialogTitle, DialogDescription } from "@/components/ui/dialog"; // Nuevo import
-import { Fish, Ruler, Calendar, Anchor, Loader2, Maximize2 } from "lucide-react";
+import { Dialog, DialogContent, DialogTrigger, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+// IMPORTANTE: Se añadió Trash2 a los iconos importados
+import { Fish, Ruler, Calendar, Anchor, Loader2, Maximize2, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -33,6 +34,31 @@ export default function BitacoraPage() {
                 setCargando(false);
             });
     }, []);
+
+    // NUEVA FUNCIÓN: Eliminar Captura
+    const eliminarCaptura = async (id: number) => {
+        // Confirmación nativa del navegador para evitar borrados accidentales
+        if (!window.confirm("¿Estás seguro de que quieres borrar esta captura? Esta acción no se puede deshacer y borrará la foto.")) {
+            return;
+        }
+
+        try {
+            const res = await fetch(`http://localhost:8000/captura/${id}`, {
+                method: "DELETE",
+            });
+            const data = await res.json();
+
+            if (data.status === "success") {
+                // Actualizamos el estado filtrando la captura borrada para que desaparezca al instante
+                setCapturas(capturas.filter(captura => captura.id !== id));
+            } else {
+                alert("Hubo un problema al borrar: " + data.message);
+            }
+        } catch (err) {
+            console.error("Error al borrar:", err);
+            alert("No se pudo conectar con el servidor para borrar la captura.");
+        }
+    };
 
     if (cargando) {
         return (
@@ -74,7 +100,6 @@ export default function BitacoraPage() {
                         {capturas.map((pez) => (
                             <Card key={pez.id} className="group overflow-hidden border-border bg-card/50 backdrop-blur hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
 
-                                {/* DIALOG PARA PANTALLA COMPLETA */}
                                 <Dialog>
                                     <DialogTrigger asChild>
                                         <div className="relative aspect-video overflow-hidden cursor-zoom-in">
@@ -93,22 +118,17 @@ export default function BitacoraPage() {
                                         </div>
                                     </DialogTrigger>
 
-                                    {/* LA CLAVE ESTÁ AQUÍ: Agregamos max-w-none y w-screen h-screen */}
                                     <DialogContent className="max-w-none w-screen h-screen p-0 m-0 border-none bg-black/95 backdrop-blur-md flex items-center justify-center sm:max-w-none rounded-none">
-
                                         <DialogTitle className="sr-only">Detalle de {pez.especie}</DialogTitle>
                                         <DialogDescription className="sr-only">Vista en pantalla completa</DialogDescription>
 
-                                        {/* Contenedor relativo para que la X de cierre y la info floten bien */}
                                         <div className="relative w-full h-full flex items-center justify-center p-4">
-
                                             <img
                                                 src={`http://localhost:8000/uploads/${pez.ruta_imagen}`}
                                                 alt={pez.especie}
                                                 className="w-auto h-auto max-w-full max-h-[90vh] object-contain rounded-md shadow-2xl transition-all"
                                             />
 
-                                            {/* Etiqueta de información mejorada */}
                                             <div className="absolute bottom-10 bg-zinc-900/90 backdrop-blur-md text-white p-6 rounded-2xl border border-white/10 shadow-2xl flex flex-col gap-1 min-w-[200px]">
                                                 <p className="text-3xl font-black capitalize tracking-tighter">{pez.especie}</p>
                                                 <div className="flex gap-4 text-blue-400 font-bold items-center">
@@ -124,9 +144,20 @@ export default function BitacoraPage() {
                                 <CardHeader className="p-4 space-y-1">
                                     <div className="flex justify-between items-start">
                                         <h3 className="text-xl font-bold text-foreground capitalize">{pez.especie}</h3>
-                                        <div className="flex items-center text-xs text-muted-foreground font-medium">
-                                            <Calendar className="h-3 w-3 mr-1" />
-                                            {format(new Date(pez.fecha), "d MMM, yyyy", { locale: es })}
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex items-center text-xs text-muted-foreground font-medium">
+                                                <Calendar className="h-3 w-3 mr-1" />
+                                                {format(new Date(pez.fecha), "d MMM, yyyy", { locale: es })}
+                                            </div>
+
+                                            {/* BOTÓN DE ELIMINAR */}
+                                            <button
+                                                onClick={() => eliminarCaptura(pez.id)}
+                                                className="text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 p-1.5 rounded-md transition-colors"
+                                                title="Borrar captura"
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
                                         </div>
                                     </div>
                                 </CardHeader>
