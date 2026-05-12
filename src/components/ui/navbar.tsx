@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Fish, Ruler, MessageSquare, Sun, Moon, Anchor, BookOpen } from "lucide-react";
+import { Fish, Ruler, MessageSquare, Sun, Moon, Anchor, BookOpen, MapPin } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 
@@ -14,7 +14,8 @@ export function Navbar() {
         { name: "Asistente", href: "/", icon: MessageSquare },
         { name: "Medidor", href: "/medidor", icon: Ruler },
         { name: "Bitácora", href: "/bitacora", icon: Anchor },
-        { name: "Nudos", href: "/nudos", icon: BookOpen }, // <-- Nueva sección de la Academia
+        { name: "Nudos", href: "/nudos", icon: BookOpen },
+        { name: "Mapa", href: "/mapa", icon: MapPin },
     ];
 
     return (
