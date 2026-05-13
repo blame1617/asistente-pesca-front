@@ -89,10 +89,10 @@ export default function MapaOfflinePage() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border pb-6">
                     <div>
                         <div className="flex items-center gap-2">
-                            <Compass className="h-6 w-6 text-blue-600 dark:text-blue-500 animate-pulse" />
-                            <h1 className="text-2xl font-bold tracking-tight text-foreground">Atlas GIS de Pesca</h1>
+                            <Compass className="h-8 w-8 text-blue-600 dark:text-blue-500 animate-pulse" />
+                            <h1 className="text-3xl font-bold tracking-tight text-foreground">Atlas GIS de Pesca</h1>
                         </div>
-                        <p className="text-sm text-muted-foreground mt-1">
+                        <p className="text-md text-muted-foreground mt-1">
                             Explora los mejores hotspots de Chile con recomendaciones técnicas autónomas.
                         </p>
                     </div>
@@ -110,7 +110,7 @@ export default function MapaOfflinePage() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {/* Búsqueda por texto */}
                     <div className="relative md:col-span-1">
-                        <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                        <Search className="absolute left-3 top-2 h-4 w-4 text-muted-foreground" />
                         <Input
                             type="text"
                             placeholder="Buscar por lugar o especie..."
@@ -157,15 +157,15 @@ export default function MapaOfflinePage() {
                                 <CardHeader className="pb-3">
                                     <div className="flex items-start justify-between gap-2">
                                         <div>
-                                            <CardTitle className="text-base font-bold text-foreground flex items-center gap-1.5">
+                                            <CardTitle className="text-xl font-bold text-foreground flex items-center gap-1.5">
                                                 <MapPin className="h-4 w-4 text-blue-600 flex-shrink-0" />
                                                 {punto.nombre}
                                             </CardTitle>
-                                            <p className="text-xs font-medium text-muted-foreground mt-0.5">{punto.region}</p>
+                                            <p className="text-md font-medium text-muted-foreground mt-0.5">{punto.region}</p>
                                         </div>
 
                                         {/* BADGE TIPO DE AGUA */}
-                                        <Badge variant={punto.tipo_agua.includes("Mar") ? "default" : "secondary"} className="flex items-center gap-1 text-[10px]">
+                                        <Badge variant={punto.tipo_agua.includes("Mar") ? "default" : "secondary"} className="flex items-center gap-1 text-xl my-1">
                                             <Waves className="h-3 w-3" />
                                             {punto.tipo_agua}
                                         </Badge>
@@ -178,7 +178,7 @@ export default function MapaOfflinePage() {
                                         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Especies Objetivo:</span>
                                         <div className="flex flex-wrap gap-1">
                                             {punto.especies_objetivo.split(", ").map((especie, idx) => (
-                                                <Badge key={idx} variant="outline" className="bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-900 text-xs">
+                                                <Badge key={idx} variant="outline" className="bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-900 text-md mt-3">
                                                     {especie}
                                                 </Badge>
                                             ))}
@@ -187,14 +187,14 @@ export default function MapaOfflinePage() {
 
                                     {/* RECOMENDACIÓN TÉCNICA */}
                                     <div className="bg-muted/40 p-3 rounded-lg border border-border mt-2">
-                                        <span className="text-xs font-bold text-foreground block mb-0.5">Táctica Recomendada:</span>
-                                        <p className="text-xs text-muted-foreground leading-relaxed">
+                                        <span className="text-md font-bold text-foreground block mb-0.5">Táctica Recomendada:</span>
+                                        <p className="text-md text-muted-foreground leading-relaxed">
                                             {punto.recomendacion_tecnica}
                                         </p>
                                     </div>
 
                                     {/* COORDENADAS GPS OFFLINE */}
-                                    <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground border-t border-border/60 pt-2.5 mt-1">
+                                    <div className="flex items-center justify-between text-md font-mono text-muted-foreground border-t border-border/60 pt-2.5 mt-1">
                                         <span>Lat: {punto.latitud}</span>
                                         <span>Lon: {punto.longitud}</span>
                                     </div>
