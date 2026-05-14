@@ -1,7 +1,8 @@
 'use client';
+
 import { useState, useRef } from 'react';
 import { useTheme } from "next-themes";
-import { useRouter } from "next/navigation"; // Para ir a la bitácora tras guardar
+import { useRouter } from "next/navigation";
 
 // Componentes de shadcn/ui
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
@@ -10,13 +11,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 // Íconos de Lucide
-import { Ruler, Upload, RotateCcw, Moon, Sun, Info, Save, Loader2 } from "lucide-react";
+import { Ruler, Upload, RotateCcw, Moon, Sun, Info, Save, Loader2, ArrowRight } from "lucide-react";
 
 export default function MedidorPeces() {
     const [imagen, setImagen] = useState<string | null>(null);
     const [puntos, setPuntos] = useState<{ x: number; y: number }[]>([]);
 
-    // ESTADOS PARA EL GUARDADO
+    // NUEVOS ESTADOS: OBJETO DE REFERENCIA PERSONALIZADO
+    const [nombreReferencia, setNombreReferencia] = useState("Objeto de referencia");
+    const [tamanoReferencia, setTamanoReferencia] = useState<number>(10); // Valor por defecto: 10 cm
+    const [referenciaBloqueada, setReferenciaBloqueada] = useState(false);
+
+    // ESTADOS PARA EL GUARDADO FINAL
     const [especie, setEspecie] = useState("");
     const [senuelo, setSenuelo] = useState("");
     const [guardando, setGuardando] = useState(false);
@@ -25,16 +31,15 @@ export default function MedidorPeces() {
     const router = useRouter();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const TARJETA_ANCHO_CM = 8.56;
-
     const manejarSubidaImagen = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
             const url = URL.createObjectURL(file);
             setImagen(url);
             setPuntos([]);
-            setEspecie(""); // Limpiar al subir nueva foto
+            setEspecie("");
             setSenuelo("");
+            setReferenciaBloqueada(false); // Permite reconfigurar el objeto al subir nueva foto
         }
         if (e.target) {
             e.target.value = '';
@@ -42,7 +47,13 @@ export default function MedidorPeces() {
     };
 
     const manejarClicImagen = (e: React.MouseEvent<HTMLDivElement>) => {
+        // Obligamos a definir el tamaño de referencia antes de trazar puntos
+        if (!referenciaBloqueada) {
+            alert("Por favor, confirma el tamaño de tu objeto de referencia antes de marcar los puntos.");
+            return;
+        }
         if (puntos.length >= 4) return;
+
         const rect = e.currentTarget.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
@@ -55,30 +66,37 @@ export default function MedidorPeces() {
         return Math.sqrt(dx * dx + dy * dy);
     };
 
+    // MOTOR MATEMÁTICO ACTUALIZADO (Usa la variable tamanoReferencia)
     const calcularResultados = () => {
-        if (puntos.length < 4) return null;
-        const pxTarjeta = obtenerDistanciaPx(puntos[0], puntos[1]);
-        const ratioPxPorCm = pxTarjeta / TARJETA_ANCHO_CM;
+        if (puntos.length < 4 || tamanoReferencia <= 0) return null;
+        const pxObjeto = obtenerDistanciaPx(puntos[0], puntos[1]);
+        if (pxObjeto === 0) return null; // Evitar división por cero
+
+        const ratioPxPorCm = pxObjeto / tamanoReferencia;
         const pxPez = obtenerDistanciaPx(puntos[2], puntos[3]);
         const cmPez = pxPez / ratioPxPorCm;
+
         return {
             ratio: ratioPxPorCm.toFixed(1),
             medidaFinal: cmPez.toFixed(1)
         };
     };
 
+    // INSTRUCCIONES DINÁMICAS BASADAS EN EL NOMBRE DEL OBJETO
     const obtenerInstrucciones = () => {
         if (!imagen) return "Sube una foto para comenzar a medir.";
-        if (puntos.length === 0) return "Paso 1: Haz clic en un extremo de la TARJETA.";
-        if (puntos.length === 1) return "Paso 1: Haz clic en el otro extremo de la TARJETA.";
-        if (puntos.length === 2) return "Paso 2: ¡Tarjeta lista! Haz clic en la BOCA del pez.";
-        if (puntos.length === 3) return "Paso 2: Haz clic en la COLA del pez.";
-        return "¡Medición completada! Completa los datos para guardar.";
+        if (!referenciaBloqueada) return "Define qué objeto usarás como referencia y su tamaño real en centímetros.";
+
+        const nombreObj = nombreReferencia.trim() || "objeto";
+        if (puntos.length === 0) return `Paso 1: Haz clic en un extremo de tu [${nombreObj}].`;
+        if (puntos.length === 1) return `Paso 1: Haz clic en el otro extremo de tu [${nombreObj}].`;
+        if (puntos.length === 2) return `Paso 2: ¡Calibrado! Ahora haz clic en la BOCA del pez.`;
+        if (puntos.length === 3) return `Paso 2: Haz clic en la COLA del pez.`;
+        return "¡Medición completada! Completa los datos para guardar en tu bitácora.";
     };
 
     const resultados = calcularResultados();
 
-    // --- FUNCIÓN DE GUARDADO ---
     const handleGuardar = async () => {
         if (!resultados || !especie.trim()) {
             alert("Por favor, ingresa al menos el nombre de la especie.");
@@ -87,7 +105,6 @@ export default function MedidorPeces() {
 
         setGuardando(true);
         try {
-            // Convertimos el blob URL en un archivo real
             const responseImg = await fetch(imagen!);
             const blob = await responseImg.blob();
             const file = new File([blob], "captura_pesca.jpg", { type: "image/jpeg" });
@@ -116,8 +133,12 @@ export default function MedidorPeces() {
         }
     };
 
+    const reiniciarMedicion = () => {
+        setPuntos([]);
+        setReferenciaBloqueada(false); // Permite cambiar el tamaño si el usuario se equivocó
+    };
+
     return (
-        /* pt-24 añadido para que la Navbar no tape el contenido */
         <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-cyan-50 dark:from-slate-950 dark:via-background dark:to-slate-900 p-4 md:p-8 pt-24 font-sans relative flex items-center justify-center transition-colors duration-500">
             <Card className="w-full max-w-3xl shadow-2xl border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
 
@@ -128,7 +149,7 @@ export default function MedidorPeces() {
                         </div>
                         <div>
                             <h1 className="text-lg font-bold tracking-tight text-foreground">Regla Digital</h1>
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Fotogrametría Manual</p>
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Calibración por Objeto Dinámico</p>
                         </div>
                     </div>
 
@@ -146,6 +167,7 @@ export default function MedidorPeces() {
 
                 <CardContent className="p-4 md:p-6 space-y-6">
 
+                    {/* BANNER DE INSTRUCCIONES */}
                     <div className="flex items-start gap-3 p-4 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 shadow-inner transition-colors">
                         <Info className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
                         <p className="text-sm font-medium text-blue-800 dark:text-blue-300">
@@ -161,13 +183,75 @@ export default function MedidorPeces() {
                                 <Upload className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                             </div>
                             <h3 className="text-lg font-semibold text-foreground mb-1">Sube la foto de tu captura</h3>
-                            <p className="text-sm text-muted-foreground text-center max-w-sm">Coloca un carnet o tarjeta cerca del pez para calibrar.</p>
+                            <p className="text-sm text-muted-foreground text-center max-w-sm">Asegúrate de que haya un objeto de tamaño conocido junto al pez.</p>
                         </div>
                     )}
 
                     {imagen && (
                         <div className="space-y-6">
-                            <div className="border border-border p-2 rounded-xl bg-muted/20 flex justify-center relative overflow-hidden shadow-inner group">
+
+                            {/* PASO PREVIO: CONFIGURACIÓN DEL OBJETO DE REFERENCIA */}
+                            {!referenciaBloqueada ? (
+                                <div className="border border-blue-200 dark:border-blue-900/60 bg-blue-50/50 dark:bg-blue-950/20 p-4 rounded-xl space-y-4 animate-in fade-in duration-300">
+                                    <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-[10px] text-white">1</span>
+                                        Configura tu calibrador
+                                    </h3>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="space-y-1.5 md:col-span-2">
+                                            <Label htmlFor="nombreRef" className="text-xs">¿Qué objeto usarás?</Label>
+                                            <Input
+                                                id="nombreRef"
+                                                placeholder="Ej: Botella de agua, Pinza, Cuchillo..."
+                                                value={nombreReferencia === "Objeto de referencia" ? "" : nombreReferencia}
+                                                onChange={(e) => setNombreReferencia(e.target.value || "Objeto de referencia")}
+                                                className="bg-card"
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <Label htmlFor="tamanoRef" className="text-xs">Tamaño Real (cm)</Label>
+                                            <Input
+                                                id="tamanoRef"
+                                                type="number"
+                                                step="0.1"
+                                                min="0.1"
+                                                value={tamanoReferencia}
+                                                onChange={(e) => setTamanoReferencia(parseFloat(e.target.value) || 0)}
+                                                className="bg-card font-bold text-blue-600 dark:text-blue-400"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <Button
+                                        className="w-full bg-blue-600 hover:bg-blue-700 text-white gap-2"
+                                        onClick={() => {
+                                            if (tamanoReferencia <= 0) {
+                                                alert("El tamaño de referencia debe ser mayor a 0 cm.");
+                                                return;
+                                            }
+                                            setReferenciaBloqueada(true);
+                                        }}
+                                    >
+                                        Confirmar y empezar a medir <ArrowRight className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            ) : (
+                                // Muestra un resumen compacto del objeto bloqueado
+                                <div className="flex items-center justify-between border border-border p-3 rounded-lg bg-muted/30 text-xs">
+                                    <div>
+                                        <span className="text-muted-foreground font-medium">Calibrando con: </span>
+                                        <span className="font-bold text-foreground">{nombreReferencia}</span>
+                                        <span className="text-blue-600 dark:text-blue-400 font-bold ml-1">({tamanoReferencia} cm)</span>
+                                    </div>
+                                    <Button variant="link" size="sm" className="h-auto p-0 text-xs text-blue-600" onClick={() => setReferenciaBloqueada(false)}>
+                                        Editar calibrador
+                                    </Button>
+                                </div>
+                            )}
+
+                            {/* LIENZO DE LA IMAGEN */}
+                            <div className={`border border-border p-2 rounded-xl bg-muted/20 flex justify-center relative overflow-hidden shadow-inner group ${!referenciaBloqueada ? 'opacity-50 pointer-events-none' : ''}`}>
                                 <Button size="sm" variant="secondary" className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-md" onClick={() => fileInputRef.current?.click()}>
                                     <Upload className="h-4 w-4 mr-2" /> Cambiar foto
                                 </Button>
@@ -184,16 +268,16 @@ export default function MedidorPeces() {
                                 </div>
                             </div>
 
-                            {/* CAMPOS DE DATOS TRAS MEDICIÓN */}
+                            {/* CAMPOS DE DATOS TRAS MEDICIÓN FINAL */}
                             {resultados && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in zoom-in duration-300">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in zoom-in duration-300 border-t border-border pt-4">
                                     <div className="space-y-2">
-                                        <Label htmlFor="especie">Especie</Label>
-                                        <Input id="especie" placeholder="Ej: Lenguado, Corvina..." value={especie} onChange={(e) => setEspecie(e.target.value)} />
+                                        <Label htmlFor="especie">Especie Capturada</Label>
+                                        <Input id="especie" placeholder="Ej: Trucha Fario, Corvina..." value={especie} onChange={(e) => setEspecie(e.target.value)} />
                                     </div>
                                     <div className="space-y-2">
-                                        <Label htmlFor="senuelo">Señuelo</Label>
-                                        <Input id="senuelo" placeholder="Ej: Minnow 110, Chispa..." value={senuelo} onChange={(e) => setSenuelo(e.target.value)} />
+                                        <Label htmlFor="senuelo">Señuelo / Cebo</Label>
+                                        <Input id="senuelo" placeholder="Ej: Spinner Mepps, Chispa..." value={senuelo} onChange={(e) => setSenuelo(e.target.value)} />
                                     </div>
                                 </div>
                             )}
@@ -212,19 +296,19 @@ export default function MedidorPeces() {
                                 </div>
                             </div>
                         ) : (
-                            <p className="text-muted-foreground italic text-sm">Esperando medición...</p>
+                            <p className="text-muted-foreground italic text-sm">Esperando trazo en imagen...</p>
                         )}
                     </div>
 
                     <div className="flex gap-2">
-                        <Button variant="outline" onClick={() => setPuntos([])} disabled={puntos.length === 0}>
+                        <Button variant="outline" onClick={reiniciarMedicion} disabled={puntos.length === 0 && !referenciaBloqueada}>
                             <RotateCcw className="mr-2 h-4 w-4" /> Reiniciar
                         </Button>
 
                         {resultados && (
                             <Button onClick={handleGuardar} disabled={guardando} className="bg-green-600 hover:bg-green-700 text-white shadow-md">
                                 {guardando ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                                Guardar
+                                Guardar en Bitácora
                             </Button>
                         )}
                     </div>
