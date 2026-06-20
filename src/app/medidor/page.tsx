@@ -3,6 +3,8 @@
 import { useState, useRef } from 'react';
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
+import { useNetwork } from "@/components/NetworkProvider";
+import { createClient } from "@/utils/supabase/client";
 
 // Componentes de shadcn/ui
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
@@ -30,6 +32,9 @@ export default function MedidorPeces() {
     const { setTheme, theme } = useTheme();
     const router = useRouter();
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const { isOnline } = useNetwork();
+    const supabase = createClient();
 
     const manejarSubidaImagen = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -97,6 +102,9 @@ export default function MedidorPeces() {
 
     const resultados = calcularResultados();
 
+    // ==============================================================
+    // FUNCIÓN DE GUARDADO: PATRÓN DUAL-WRITE (OFFLINE-FIRST)
+    // ==============================================================
     const handleGuardar = async () => {
         if (!resultados || !especie.trim()) {
             alert("Por favor, ingresa al menos el nombre de la especie.");
@@ -105,29 +113,75 @@ export default function MedidorPeces() {
 
         setGuardando(true);
         try {
+            // Preparamos el archivo a partir de la imagen en memoria
             const responseImg = await fetch(imagen!);
             const blob = await responseImg.blob();
             const file = new File([blob], "captura_pesca.jpg", { type: "image/jpeg" });
 
+            // ---------------------------------------------------------
+            // 1. SIEMPRE GUARDAR EN LOCAL (Fuente de la verdad)
+            // ---------------------------------------------------------
             const formData = new FormData();
             formData.append("especie", especie);
             formData.append("medida", resultados.medidaFinal);
             formData.append("senuelo", senuelo || "No especificado");
             formData.append("file", file);
 
-            const res = await fetch("http://localhost:8000/guardar-captura", {
+            const resLocal = await fetch("http://localhost:8000/guardar-captura", {
                 method: "POST",
                 body: formData,
             });
 
-            if (res.ok) {
-                router.push("/bitacora");
-            } else {
-                throw new Error("Error en el servidor");
+            if (!resLocal.ok) {
+                throw new Error("Error en el servidor local. Asegúrate de tener FastAPI encendido.");
             }
-        } catch (error) {
-            console.error("Error guardando:", error);
-            alert("No se pudo guardar la captura. ¿Está el backend encendido?");
+
+            // ---------------------------------------------------------
+            // 2. SI HAY CONEXIÓN Y SESIÓN, SINCRONIZAR A LA NUBE (Dual-Write)
+            // ---------------------------------------------------------
+            if (isOnline) {
+                const { data: { session } } = await supabase.auth.getSession();
+
+                if (session) {
+                    // A. Subir a Storage
+                    const fileName = `${session.user.id}-${Date.now()}.jpg`;
+                    const { error: uploadError } = await supabase.storage
+                        .from('capturas')
+                        .upload(fileName, file, { cacheControl: '3600', upsert: false });
+
+                    if (!uploadError) {
+                        // B. Obtener URL y guardar en PostgreSQL
+                        const { data: publicUrlData } = supabase.storage
+                            .from('capturas')
+                            .getPublicUrl(fileName);
+
+                        const { error: dbError } = await supabase
+                            .from('capturas_cloud')
+                            .insert({
+                                user_id: session.user.id,
+                                especie: especie,
+                                medida_cm: parseFloat(resultados.medidaFinal),
+                                senuelo: senuelo || "No especificado",
+                                ruta_imagen: publicUrlData.publicUrl
+                            });
+
+                        if (dbError) {
+                            console.warn("Advertencia: Se guardó en local, pero falló el insert en la nube.", dbError);
+                        }
+                    } else {
+                        console.warn("Advertencia: Se guardó en local, pero falló la subida de imagen a la nube.", uploadError);
+                    }
+                } else {
+                    console.log("Modo Cloud activo, pero sin sesión. Solo se guardó en local.");
+                }
+            }
+
+            // 3. Redirigir a la bitácora independientemente de si la nube falló o no
+            router.push("/bitacora");
+
+        } catch (error: any) {
+            console.error("Error crítico guardando:", error);
+            alert(error.message || "No se pudo guardar la captura.");
         } finally {
             setGuardando(false);
         }
@@ -149,7 +203,9 @@ export default function MedidorPeces() {
                         </div>
                         <div>
                             <h1 className="text-lg font-bold tracking-tight text-foreground">Regla Digital</h1>
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Calibración por Objeto Dinámico</p>
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                                {isOnline ? "Modo Nube Activo" : "Modo Local Activo"}
+                            </p>
                         </div>
                     </div>
 
@@ -167,7 +223,6 @@ export default function MedidorPeces() {
 
                 <CardContent className="p-4 md:p-6 space-y-6">
 
-                    {/* BANNER DE INSTRUCCIONES */}
                     <div className="flex items-start gap-3 p-4 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 shadow-inner transition-colors">
                         <Info className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
                         <p className="text-sm font-medium text-blue-800 dark:text-blue-300">
@@ -190,7 +245,6 @@ export default function MedidorPeces() {
                     {imagen && (
                         <div className="space-y-6">
 
-                            {/* PASO PREVIO: CONFIGURACIÓN DEL OBJETO DE REFERENCIA */}
                             {!referenciaBloqueada ? (
                                 <div className="border border-blue-200 dark:border-blue-900/60 bg-blue-50/50 dark:bg-blue-950/20 p-4 rounded-xl space-y-4 animate-in fade-in duration-300">
                                     <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
@@ -237,7 +291,6 @@ export default function MedidorPeces() {
                                     </Button>
                                 </div>
                             ) : (
-                                // Muestra un resumen compacto del objeto bloqueado
                                 <div className="flex items-center justify-between border border-border p-3 rounded-lg bg-muted/30 text-xs">
                                     <div>
                                         <span className="text-muted-foreground font-medium">Calibrando con: </span>
@@ -250,7 +303,6 @@ export default function MedidorPeces() {
                                 </div>
                             )}
 
-                            {/* LIENZO DE LA IMAGEN */}
                             <div className={`border border-border p-2 rounded-xl bg-muted/20 flex justify-center relative overflow-hidden shadow-inner group ${!referenciaBloqueada ? 'opacity-50 pointer-events-none' : ''}`}>
                                 <Button size="sm" variant="secondary" className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity z-10 shadow-md" onClick={() => fileInputRef.current?.click()}>
                                     <Upload className="h-4 w-4 mr-2" /> Cambiar foto
@@ -268,7 +320,6 @@ export default function MedidorPeces() {
                                 </div>
                             </div>
 
-                            {/* CAMPOS DE DATOS TRAS MEDICIÓN FINAL */}
                             {resultados && (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in zoom-in duration-300 border-t border-border pt-4">
                                     <div className="space-y-2">
