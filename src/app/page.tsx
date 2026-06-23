@@ -5,6 +5,7 @@ import Webcam from 'react-webcam';
 import ReactMarkdown from "react-markdown";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
+import { useNetwork } from "@/components/NetworkProvider"; // <-- IMPORTACIÓN NUEVA
 
 // Componentes de shadcn/ui
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,7 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 // Íconos de Lucide
-import { Camera, Paperclip, Send, Fish, User, Bot, X, Moon, Sun } from "lucide-react";
+import { Camera, Paperclip, Send, Fish, User, Bot, X, Moon, Sun, Cloud, Server } from "lucide-react"; // <-- SE AÑADIÓ CLOUD Y SERVER
 
 interface Mensaje {
   role: string;
@@ -21,7 +22,6 @@ interface Mensaje {
 }
 
 export default function AsistentePesca() {
-  // 1. Inicializamos vacío para evitar desajustes de hidratación en Next.js
   const router = useRouter();
   const [mensajes, setMensajes] = useState<Mensaje[]>([]);
   const [inputUsuario, setInputUsuario] = useState("");
@@ -29,19 +29,16 @@ export default function AsistentePesca() {
   const [cargando, setCargando] = useState(false);
   const [mostrarCamara, setMostrarCamara] = useState(false);
 
-  // Hook para controlar el modo oscuro
+  // ESTADO GLOBAL DE RED Y TEMA
   const { setTheme, theme } = useTheme();
+  const { isOnline } = useNetwork(); // <-- HOOK DE RED CONECTADO
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const webcamRef = useRef<Webcam>(null);
 
-
   // --- LÓGICA DE MEMORIA DE SESIÓN ---
-
-  // 2. RECUPERAR: Se ejecuta una sola vez al cargar la página
   useEffect(() => {
-    // Recuperar Chat
     const historialGuardado = sessionStorage.getItem("pesca_chat_history");
     if (historialGuardado) {
       setMensajes(JSON.parse(historialGuardado));
@@ -51,14 +48,12 @@ export default function AsistentePesca() {
       ]);
     }
 
-    // Recuperar Señuelo (Contexto)
     const senueloGuardado = sessionStorage.getItem("pesca_lure_context");
     if (senueloGuardado) {
       setSenueloActual(senueloGuardado);
     }
   }, []);
 
-  // 3. GUARDAR: Se ejecuta cada vez que 'mensajes' cambia
   useEffect(() => {
     if (mensajes.length > 0) {
       sessionStorage.setItem("pesca_chat_history", JSON.stringify(mensajes));
@@ -137,6 +132,9 @@ export default function AsistentePesca() {
     }
   };
 
+  // ==============================================================
+  // ENRUTAMIENTO HÍBRIDO DEL CHAT (ACTUALIZADO)
+  // ==============================================================
   const enviarMensaje = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!inputUsuario.trim()) return;
@@ -149,10 +147,14 @@ export default function AsistentePesca() {
     setCargando(true);
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/chat", {
+      // 1. DECIDIR EL ENDPOINT DINÁMICAMENTE
+      const endpoint = isOnline
+        ? "http://127.0.0.1:8000/chat-cloud"
+        : "http://127.0.0.1:8000/chat";
+
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // AQUÍ ESTÁ EL ARREGLO 1: Enviamos el señuelo actual al backend
         body: JSON.stringify({
           messages: historialActualizado,
           senuelo_actual: senueloActual
@@ -160,33 +162,86 @@ export default function AsistentePesca() {
       });
 
       const data = await response.json();
+
+      // Mostrar el mensaje temporal (Ej: "*(Conectando con el satélite...)*")
       setMensajes((prev) => [...prev, { role: data.role, content: data.content }]);
 
+      // 2. MANEJAR BANDERAS DE ACCIÓN Y ENRUTAMIENTO (HANDOFF)
       if (data.action === "navigate_nudos") {
         console.log("Agent Action: Redirigiendo a nudos...");
         setTimeout(() => {
           router.push("/nudos");
         }, 2000);
       }
+      else if (data.action === "route_clima") {
+        console.log("Handoff -> Agente Clima:", data.parametros_agente);
+        try {
+          // 3a. El Rebote: Llamamos al Agente de Clima en FastAPI
+          const resAgente = await fetch("http://127.0.0.1:8000/agente-clima", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data.parametros_agente),
+          });
+          const dataAgente = await resAgente.json();
+
+          // 4a. Sobreescribimos el mensaje temporal con la respuesta final
+          setMensajes((prev) => {
+            const updated = [...prev];
+            updated[updated.length - 1] = { role: "assistant", content: dataAgente.respuesta };
+            return updated;
+          });
+        } catch (error) {
+          console.error("Error en Agente Clima:", error);
+          setMensajes((prev) => {
+            const updated = [...prev];
+            updated[updated.length - 1] = { role: "assistant", content: "Error al obtener los datos del clima." };
+            return updated;
+          });
+        }
+      }
+      else if (data.action === "route_analista") {
+        console.log("Handoff -> Agente Analista Supabase:", data.parametros_agente);
+        try {
+          // 3b. El Rebote: Llamamos al Agente Analista en FastAPI
+          const resAgente = await fetch("http://127.0.0.1:8000/agente-analista", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data.parametros_agente),
+          });
+          const dataAgente = await resAgente.json();
+
+          // 4b. Sobreescribimos el mensaje temporal con la respuesta final
+          setMensajes((prev) => {
+            const updated = [...prev];
+            updated[updated.length - 1] = { role: "assistant", content: dataAgente.respuesta };
+            return updated;
+          });
+        } catch (error) {
+          console.error("Error en Agente Analista:", error);
+          setMensajes((prev) => {
+            const updated = [...prev];
+            updated[updated.length - 1] = { role: "assistant", content: "Error al consultar la base de datos." };
+            return updated;
+          });
+        }
+      }
 
     } catch (error) {
       console.error("Error en el chat:", error);
-      setMensajes((prev) => [...prev, { role: "assistant", content: "Error al conectar con el servidor local." }]);
+      setMensajes((prev) => [...prev, { role: "assistant", content: `Error al conectar con el servidor ${isOnline ? 'en la nube' : 'local'}.` }]);
     } finally {
+      // Apagamos la animación de carga sin importar qué ruta tomó
       setCargando(false);
     }
   };
 
   return (
-    // Aquí agregamos el gradiente "Oceánico" para el fondo general
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-cyan-50 dark:from-slate-950 dark:via-background dark:to-slate-900 p-4 md:p-8 font-sans relative flex items-center justify-center transition-colors duration-500">
 
-      {/* MODAL DE LA CÁMARA (A prueba de balas) */}
+      {/* MODAL DE LA CÁMARA */}
       {mostrarCamara && (
         <div className="fixed inset-0 bg-background/90 backdrop-blur-sm z-[100] flex flex-col items-center justify-center p-4">
-
           <Card className="w-full max-w-lg flex flex-col border-border shadow-2xl bg-card overflow-hidden max-h-[95vh]">
-
             <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 bg-muted/50 flex-shrink-0">
               <h2 className="text-lg font-semibold tracking-tight text-foreground">Escáner de Señuelo</h2>
               <Button variant="ghost" size="icon" onClick={() => setMostrarCamara(false)}>
@@ -194,7 +249,6 @@ export default function AsistentePesca() {
               </Button>
             </CardHeader>
 
-            {/* Pantalla de cámara: se adapta al espacio que queda sin deformarse */}
             <div className="bg-black relative aspect-[3/4] sm:aspect-video w-full overflow-hidden flex-1 min-h-[300px]">
               <Webcam
                 audio={false}
@@ -205,17 +259,13 @@ export default function AsistentePesca() {
               />
             </div>
 
-            {/* ZONA DE BOTONES: La magia está en 'flex-col sm:flex-row' y 'flex-1' */}
             <div className="p-4 flex flex-col sm:flex-row gap-3 flex-shrink-0 border-t border-border bg-card">
-
               <Button variant="outline" className="flex-1 py-6 text-base order-2 sm:order-1" onClick={() => setMostrarCamara(false)}>
                 Cancelar
               </Button>
-
               <Button className="flex-1 py-6 text-base bg-blue-600 hover:bg-blue-700 text-white shadow-md order-1 sm:order-2" onClick={capturarFoto}>
                 <Camera className="mr-2 h-5 w-5" /> Tomar Foto
               </Button>
-
             </div>
           </Card>
         </div>
@@ -224,15 +274,21 @@ export default function AsistentePesca() {
       {/* CONTENEDOR PRINCIPAL DEL CHAT */}
       <Card className="w-full max-w-3xl h-[85vh] flex flex-col shadow-2xl border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
 
-        {/* CABECERA */}
+        {/* CABECERA CON INDICADOR HÍBRIDO */}
         <CardHeader className="flex flex-row items-center justify-between border-b border-border bg-card/50 p-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 dark:bg-blue-500 text-white shadow-md">
+            <div className={`flex h-10 w-10 items-center justify-center rounded-full text-white shadow-md transition-colors ${isOnline ? 'bg-green-600 dark:bg-green-500' : 'bg-blue-600 dark:bg-blue-500'}`}>
               <Fish className="h-5 w-5" />
             </div>
             <div>
               <h1 className="text-lg font-bold tracking-tight text-foreground">Asistente de Pesca</h1>
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Atento a tus dudas</p>
+              <p className="text-xs font-medium uppercase tracking-wider flex items-center gap-1 mt-0.5">
+                {isOnline ? (
+                  <span className="text-green-600 dark:text-green-400 flex items-center gap-1"><Cloud className="h-3 w-3" /> Azure AI Activo</span>
+                ) : (
+                  <span className="text-blue-600 dark:text-blue-400 flex items-center gap-1"><Server className="h-3 w-3" /> Offline Local</span>
+                )}
+              </p>
             </div>
           </div>
 
@@ -244,7 +300,6 @@ export default function AsistentePesca() {
               </span>
             </div>
 
-            {/* BOTÓN DE MODO OSCURO */}
             <Button
               variant="ghost"
               size="icon"
@@ -267,17 +322,17 @@ export default function AsistentePesca() {
                 {msg.role === 'user' ? (
                   <AvatarFallback className="bg-blue-600 text-white"><User className="h-4 w-4" /></AvatarFallback>
                 ) : (
-                  <AvatarFallback className="bg-background text-foreground"><Bot className="h-5 w-5 text-blue-500" /></AvatarFallback>
+                  <AvatarFallback className="bg-background text-foreground">
+                    <Bot className={`h-5 w-5 ${isOnline ? 'text-green-500' : 'text-blue-500'}`} />
+                  </AvatarFallback>
                 )}
               </Avatar>
 
-              {/* AQUÍ ESTÁ EL ARREGLO 2: Se agregó min-w-0 para forzar el límite del 80% */}
               <div className={`max-w-[80%] min-w-0 rounded-2xl px-5 py-3 text-sm shadow-md ${msg.role === 'user'
                 ? 'bg-blue-600 dark:bg-blue-700 text-white rounded-tr-sm'
                 : 'bg-background border border-border text-foreground rounded-tl-sm'
                 }`}>
 
-                {/* Ajustamos el prose para que corte las palabras y solo la tabla tenga scroll interno */}
                 <div className={`prose prose-sm max-w-none break-words overflow-hidden prose-table:overflow-x-auto prose-pre:overflow-x-auto ${msg.role === 'user' ? 'text-white prose-p:text-white prose-strong:text-white' : 'dark:prose-invert'}`}>
                   <ReactMarkdown>{msg.content}</ReactMarkdown>
                 </div>
@@ -289,13 +344,15 @@ export default function AsistentePesca() {
           {cargando && (
             <div className="flex gap-3 flex-row">
               <Avatar className="h-8 w-8 mt-1 shadow-sm border border-border">
-                <AvatarFallback className="bg-background text-foreground"><Bot className="h-5 w-5 text-blue-500" /></AvatarFallback>
+                <AvatarFallback className="bg-background text-foreground">
+                  <Bot className={`h-5 w-5 ${isOnline ? 'text-green-500' : 'text-blue-500'}`} />
+                </AvatarFallback>
               </Avatar>
               <div className="bg-background border border-border rounded-2xl rounded-tl-sm px-5 py-3 shadow-md flex items-center gap-2">
                 <span className="flex gap-1">
-                  <span className="h-2 w-2 bg-blue-400 rounded-full animate-bounce"></span>
-                  <span className="h-2 w-2 bg-blue-400 rounded-full animate-bounce delay-75"></span>
-                  <span className="h-2 w-2 bg-blue-400 rounded-full animate-bounce delay-150"></span>
+                  <span className={`h-2 w-2 rounded-full animate-bounce ${isOnline ? 'bg-green-400' : 'bg-blue-400'}`}></span>
+                  <span className={`h-2 w-2 rounded-full animate-bounce delay-75 ${isOnline ? 'bg-green-400' : 'bg-blue-400'}`}></span>
+                  <span className={`h-2 w-2 rounded-full animate-bounce delay-150 ${isOnline ? 'bg-green-400' : 'bg-blue-400'}`}></span>
                 </span>
               </div>
             </div>
@@ -305,7 +362,7 @@ export default function AsistentePesca() {
 
         {/* ZONA DE CONTROLES */}
         <CardFooter className="p-4 bg-card border-t border-border">
-          <form onSubmit={enviarMensaje} className="flex w-full items-center gap-2 bg-muted/50 rounded-full p-1 border border-border shadow-inner focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 focus-within:ring-offset-background transition-all">
+          <form onSubmit={enviarMensaje} className={`flex w-full items-center gap-2 bg-muted/50 rounded-full p-1 border border-border shadow-inner focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-offset-background transition-all ${isOnline ? 'focus-within:ring-green-500' : 'focus-within:ring-blue-500'}`}>
 
             <Button
               type="button"
@@ -349,7 +406,7 @@ export default function AsistentePesca() {
             <Button
               type="submit"
               disabled={cargando || !inputUsuario.trim()}
-              className="rounded-full bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 text-white shadow-md flex-shrink-0"
+              className={`rounded-full text-white shadow-md flex-shrink-0 ${isOnline ? 'bg-green-600 hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-500' : 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500'}`}
               size="icon"
             >
               <Send className="h-4 w-4 ml-0.5" />
